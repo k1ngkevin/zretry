@@ -22,10 +22,14 @@ pub const RetryError = error{
 
 fn validateOptions(options: RetryOptions) RetryError!void {
     if (options.max_attempts == 0) return RetryError.InvalidMaxAttempts;
+    if (options.inital_delay_ms < 0) return RetryError.InvalidDelay;
+    if (options.max_delay_ms < 0) return RetryError.InvalidDelay;
     if (options.inital_delay_ms > options.max_delay_ms) return RetryError.InvalidDelay;
 }
 
 pub fn zretry(comptime operation: anytype, options: RetryOptions) !void {
+    try validateOptions(options);
+
     var delay_ms: i64 = options.inital_delay_ms;
 
     const random = options.random orelse blk: {
@@ -88,6 +92,16 @@ test "inital can't exceed max" {
     try testing.expectError(error.InvalidDelay, validateOptions(options));
 }
 
+test "delays can't be negative" {
+    var options = testOptions();
+    options.inital_delay_ms = -1;
+    try testing.expectError(error.InvalidDelay, validateOptions(options));
+
+    options = testOptions();
+    options.max_delay_ms = -1;
+    try testing.expectError(error.InvalidDelay, validateOptions(options));
+}
+
 const WorkError = error{FunctionFail};
 
 const Work = struct {
@@ -120,4 +134,14 @@ test "faultyWork fails twice succeeds on third" {
 
     try zretry(Work.faultyWork, zeroDelayTestOptions());
     try testing.expectEqual(@as(i32, 3), Work.calls);
+}
+
+test "zretry validates options before calling operation" {
+    Work.calls = 0;
+
+    var options = zeroDelayTestOptions();
+    options.inital_delay_ms = -1;
+
+    try testing.expectError(error.InvalidDelay, zretry(Work.doWork, options));
+    try testing.expectEqual(@as(i32, 0), Work.calls);
 }
