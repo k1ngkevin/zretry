@@ -7,8 +7,8 @@ pub const Strategy = enum { fixed, linear, exponential };
 
 pub const RetryOptions = struct {
     max_attempts: usize = 5,
-    inital_delay_ms: u64 = 1000,
-    max_delay_ms: u64 = 5000,
+    inital_delay_ms: i64 = 1000,
+    max_delay_ms: i64 = 5000,
     jitter: Jitter = .full,
     random: ?std.Random = null,
     strategy: Strategy = .exponential,
@@ -25,23 +25,23 @@ fn validateOptions(options: RetryOptions) RetryError!void {
 }
 
 pub fn zretry(io: std.Io, comptime operation: anytype, options: RetryOptions) !void {
-    var delay_ms = options.inital_delay_ms;
+    var delay_ms: i64 = options.inital_delay_ms;
 
     const random = options.random orelse blk: {
         var seed: u64 = undefined;
         io.random(std.mem.asBytes(&seed));
-        const prng = std.Random.DefaultPrng.init(seed);
+        var prng = std.Random.DefaultPrng.init(seed);
         break :blk prng.random();
     };
 
     var attempt: usize = 0;
-    while (attempt < options.max_attemps) : (attempt += 1) {
+    while (attempt < options.max_attempts) : (attempt += 1) {
         operation() catch |err| {
             if (attempt + 1 == options.max_attempts) return err;
 
-            const sleep_ms = switch (options.jitter) {
+            const sleep_ms: i64 = switch (options.jitter) {
                 .none => delay_ms,
-                .full => random.uintAtMost(u64, delay_ms),
+                .full => random.intRangeAtMost(i64, 0, delay_ms),
             };
 
             try io.sleep(.fromMilliseconds(sleep_ms), .awake);
@@ -67,4 +67,22 @@ test "max attempts can't be zero" {
 
 test "inital can't exceed max" {
     try testing.expectError(error.InvalidDelay, validateOptions(.{ .inital_delay_ms = 2000, .max_delay_ms = 1000 }));
+}
+
+const Work = struct {
+    var calls: i32 = 0;
+
+    fn doWork() !void {
+        const value: i32 = 10 + 10;
+        try testing.expectEqual(@as(i32, 20), value);
+        calls += 1;
+    }
+};
+
+test "only calls once on working function" {
+    var threaded = std.Io.Threaded.init(std.testing.allocator, .{});
+    defer threaded.deinit();
+
+    try zretry(threaded.io(), Work.doWork, .{ .inital_delay_ms = 0, .max_delay_ms = 0 });
+    try testing.expectEqual(@as(i32, 1), Work.calls);
 }
