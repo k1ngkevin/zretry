@@ -1,0 +1,14 @@
+.{
+    .name = .zretry,
+    .version = "0.0.0",
+    .fingerprint = 0xf3b929fab26c0c2e, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        ".gitignore",
+        "LICENSE",
+        //"README.md",
+    },
+}
