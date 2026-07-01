@@ -6,6 +6,7 @@ pub const Jitter = enum { none, full };
 pub const Strategy = enum { fixed, linear, exponential };
 
 pub const RetryOptions = struct {
+    io: std.Io,
     max_attempts: usize = 5,
     inital_delay_ms: i64 = 1000,
     max_delay_ms: i64 = 5000,
@@ -24,12 +25,12 @@ fn validateOptions(options: RetryOptions) RetryError!void {
     if (options.inital_delay_ms > options.max_delay_ms) return RetryError.InvalidDelay;
 }
 
-pub fn zretry(io: std.Io, comptime operation: anytype, options: RetryOptions) !void {
+pub fn zretry(comptime operation: anytype, options: RetryOptions) !void {
     var delay_ms: i64 = options.inital_delay_ms;
 
     const random = options.random orelse blk: {
         var seed: u64 = undefined;
-        io.random(std.mem.asBytes(&seed));
+        options.io.random(std.mem.asBytes(&seed));
         var prng = std.Random.DefaultPrng.init(seed);
         break :blk prng.random();
     };
@@ -44,7 +45,7 @@ pub fn zretry(io: std.Io, comptime operation: anytype, options: RetryOptions) !v
                 .full => random.intRangeAtMost(i64, 0, delay_ms),
             };
 
-            try io.sleep(.fromMilliseconds(sleep_ms), .awake);
+            try options.io.sleep(.fromMilliseconds(sleep_ms), .awake);
 
             delay_ms = switch (options.strategy) {
                 .fixed => delay_ms,
@@ -57,17 +58,37 @@ pub fn zretry(io: std.Io, comptime operation: anytype, options: RetryOptions) !v
     }
 }
 
+fn testOptions() RetryOptions {
+    return .{ .io = std.testing.io };
+}
+
+fn zeroDelayTestOptions() RetryOptions {
+    var options = testOptions();
+    options.inital_delay_ms = 0;
+    options.max_delay_ms = 0;
+    return options;
+}
+
 test "default options pass" {
-    try validateOptions(.{});
+    try validateOptions(testOptions());
 }
 
 test "max attempts can't be zero" {
-    try testing.expectError(error.InvalidMaxAttempts, validateOptions(.{ .max_attempts = 0 }));
+    var options = testOptions();
+    options.max_attempts = 0;
+
+    try testing.expectError(error.InvalidMaxAttempts, validateOptions(options));
 }
 
 test "inital can't exceed max" {
-    try testing.expectError(error.InvalidDelay, validateOptions(.{ .inital_delay_ms = 2000, .max_delay_ms = 1000 }));
+    var options = testOptions();
+    options.inital_delay_ms = 2000;
+    options.max_delay_ms = 1000;
+
+    try testing.expectError(error.InvalidDelay, validateOptions(options));
 }
+
+const WorkError = error{FunctionFail};
 
 const Work = struct {
     var calls: i32 = 0;
@@ -77,12 +98,26 @@ const Work = struct {
         try testing.expectEqual(@as(i32, 20), value);
         calls += 1;
     }
+
+    fn faultyWork() WorkError!void {
+        calls += 1;
+
+        if (calls < 3) {
+            return error.FunctionFail;
+        }
+    }
 };
 
 test "only calls once on working function" {
-    var threaded = std.Io.Threaded.init(std.testing.allocator, .{});
-    defer threaded.deinit();
+    Work.calls = 0;
 
-    try zretry(threaded.io(), Work.doWork, .{ .inital_delay_ms = 0, .max_delay_ms = 0 });
+    try zretry(Work.doWork, zeroDelayTestOptions());
     try testing.expectEqual(@as(i32, 1), Work.calls);
+}
+
+test "faultyWork fails twice succeeds on third" {
+    Work.calls = 0;
+
+    try zretry(Work.faultyWork, zeroDelayTestOptions());
+    try testing.expectEqual(@as(i32, 3), Work.calls);
 }
