@@ -4,14 +4,33 @@ A Zig retry helper with configurable delay strategy and jitter.
 
 ## Installing
 
-create a project with `zig init` that has a `build.zig` and `build.zig.zon`
+Create a project with `zig init` that has a `build.zig` and `build.zig.zon`.
 
-run
-`zig fetch --save https://github.com/kevin/zretry/archive/refs/tags/v0.2.0.tar.gz`
+Run:
+
+```sh
+zig fetch --save 'git+https://github.com/k1ngkevin/zretry#v0.3.0'
+```
+
+Add this to your `build.zig`:
+
+```zig
+const zretry = b.dependency("zretry", .{
+    .target = target,
+});
+
+exe.root_module.addImport("zretry", zretry.module("zretry"));
+```
+
+then import it like this
+
+```zig
+const retry = @import("zretry");
+```
 
 ## Usage
 
-Import the module from your `build.zig` and call `zretry` with an operation that returns `!void`.
+Import the module in your code and call `zretry` with an operation that returns an error union such as `!void` or `!T`.
 The retry options carry the `std.Io` value used for sleeping and randomness.
 Pass `.{}` for a function with no arguments, or a tuple containing the arguments for a function that has them.
 
