@@ -7,7 +7,7 @@ A Zig retry helper with configurable delay strategy and jitter.
 create a project with `zig init` that has a `build.zig` and `build.zig.zon`
 
 run
-`zig fetch --save https://github.com/kevin/zretry/archive/refs/tags/v0.1.0.tar.gz`
+`zig fetch --save https://github.com/kevin/zretry/archive/refs/tags/v0.2.0.tar.gz`
 
 ## Usage
 
