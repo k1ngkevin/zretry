@@ -32,11 +32,14 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
 
     var delay_ms: i64 = options.inital_delay_ms;
 
-    const random = options.random orelse blk: {
-        var seed: u64 = undefined;
-        options.io.random(std.mem.asBytes(&seed));
-        var prng = std.Random.DefaultPrng.init(seed);
-        break :blk prng.random();
+    const maybe_random = switch (options.jitter) {
+        .none => null,
+        .full => options.random orelse blk: {
+            var seed: u64 = undefined;
+            options.io.random(std.mem.asBytes(&seed));
+            var prng = std.Random.DefaultPrng.init(seed);
+            break :blk prng.random();
+        },
     };
 
     var attempt: usize = 0;
@@ -46,7 +49,7 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
 
             const sleep_ms: i64 = switch (options.jitter) {
                 .none => delay_ms,
-                .full => random.intRangeAtMost(i64, 0, delay_ms),
+                .full => maybe_random.?.intRangeAtMost(i64, 0, delay_ms),
             };
 
             try options.io.sleep(.fromMilliseconds(sleep_ms), .awake);
