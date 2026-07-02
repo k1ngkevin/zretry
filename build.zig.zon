@@ -1,6 +1,6 @@
 .{
     .name = .zretry,
-    .version = "0.3.0",
+    .version = "0.3.1",
     .fingerprint = 0xf3b929fab26c0c2e, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0",
     .paths = .{
