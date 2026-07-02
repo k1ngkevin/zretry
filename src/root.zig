@@ -108,7 +108,7 @@ test "doesn't retry when max_attempts = 1" {
     try testing.expectEqual(@as(i32, 1), Work.calls);
 }
 
-test "inital can't exceed max" {
+test "initial can't exceed max" {
     var options = testOptions();
     options.initial_delay_ms = 2000;
     options.max_delay_ms = 1000;

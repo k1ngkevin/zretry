@@ -49,7 +49,7 @@ pub fn main(init: std.process.Init) !void {
     try retry.zretry(doWork, .{}, .{
         .io = init.io,
         .max_attempts = 5,
-        .inital_delay_ms = 250,
+        .initial_delay_ms = 250,
         .max_delay_ms = 5_000,
     });
 }
@@ -72,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
         .{
             .io = init.io,
             .max_attempts = 5,
-            .inital_delay_ms = 250,
+            .initial_delay_ms = 250,
             .max_delay_ms = 5_000,
         },
     );
@@ -83,7 +83,7 @@ pub fn main(init: std.process.Init) !void {
 
 - `io`: `std.Io` used to sleep between retries and seed jitter randomness.
 - `max_attempts`: total number of attempts before returning the final error.
-- `inital_delay_ms`: starting delay in milliseconds.
+- `initial_delay_ms`: starting delay in milliseconds.
 - `max_delay_ms`: maximum delay in milliseconds.
 - `strategy`: `.fixed`, `.linear`, or `.exponential`.
 - `jitter`: `.none` or `.full`.
