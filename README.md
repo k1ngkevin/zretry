@@ -9,7 +9,7 @@ Create a project with `zig init` that has a `build.zig` and `build.zig.zon`.
 Run:
 
 ```sh
-zig fetch --save 'git+https://github.com/k1ngkevin/zretry#v0.3.0'
+zig fetch --save 'git+https://github.com/k1ngkevin/zretry#v0.3.1'
 ```
 
 Add this to your `build.zig`:
@@ -27,6 +27,9 @@ then import it like this
 ```zig
 const retry = @import("zretry");
 ```
+
+Note:
+Make sure you're using zig version `0.16.0` or higher
 
 ## Usage
 
