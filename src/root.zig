@@ -8,7 +8,7 @@ pub const Strategy = enum { fixed, linear, exponential };
 pub const RetryOptions = struct {
     io: std.Io,
     max_attempts: usize = 5,
-    inital_delay_ms: i64 = 1000,
+    initial_delay_ms: i64 = 1000,
     max_delay_ms: i64 = 5000,
     jitter: Jitter = .full,
     random: ?std.Random = null,
@@ -22,9 +22,9 @@ pub const RetryError = error{
 
 fn validateOptions(options: RetryOptions) RetryError!void {
     if (options.max_attempts == 0) return RetryError.InvalidMaxAttempts;
-    if (options.inital_delay_ms < 0) return RetryError.InvalidDelay;
+    if (options.initial_delay_ms < 0) return RetryError.InvalidDelay;
     if (options.max_delay_ms < 0) return RetryError.InvalidDelay;
-    if (options.inital_delay_ms > options.max_delay_ms) return RetryError.InvalidDelay;
+    if (options.initial_delay_ms > options.max_delay_ms) return RetryError.InvalidDelay;
 }
 
 fn RetryPayload(comptime operation: anytype) type {
@@ -39,7 +39,7 @@ fn RetryPayload(comptime operation: anytype) type {
 pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions) !RetryPayload(operation) {
     try validateOptions(options);
 
-    var delay_ms: i64 = options.inital_delay_ms;
+    var delay_ms: i64 = options.initial_delay_ms;
 
     var prng: std.Random.DefaultPrng = undefined;
 
@@ -67,7 +67,7 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
 
             delay_ms = switch (options.strategy) {
                 .fixed => delay_ms,
-                .linear => @min(delay_ms + options.inital_delay_ms, options.max_delay_ms),
+                .linear => @min(delay_ms + options.initial_delay_ms, options.max_delay_ms),
                 .exponential => @min(delay_ms * 2, options.max_delay_ms),
             };
             continue;
@@ -83,7 +83,7 @@ fn testOptions() RetryOptions {
 
 fn zeroDelayTestOptions() RetryOptions {
     var options = testOptions();
-    options.inital_delay_ms = 0;
+    options.initial_delay_ms = 0;
     options.max_delay_ms = 0;
     return options;
 }
@@ -110,7 +110,7 @@ test "doesn't retry when max_attempts = 1" {
 
 test "inital can't exceed max" {
     var options = testOptions();
-    options.inital_delay_ms = 2000;
+    options.initial_delay_ms = 2000;
     options.max_delay_ms = 1000;
 
     try testing.expectError(error.InvalidDelay, validateOptions(options));
@@ -118,7 +118,7 @@ test "inital can't exceed max" {
 
 test "delays can't be negative" {
     var options = testOptions();
-    options.inital_delay_ms = -1;
+    options.initial_delay_ms = -1;
     try testing.expectError(error.InvalidDelay, validateOptions(options));
 
     options = testOptions();
@@ -177,7 +177,7 @@ test "can't put in negative ms values" {
     Work.calls = 0;
 
     var options = zeroDelayTestOptions();
-    options.inital_delay_ms = -1;
+    options.initial_delay_ms = -1;
 
     try testing.expectError(
         error.InvalidDelay,
