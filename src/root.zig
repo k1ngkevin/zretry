@@ -27,7 +27,7 @@ fn validateOptions(options: RetryOptions) RetryError!void {
     if (options.inital_delay_ms > options.max_delay_ms) return RetryError.InvalidDelay;
 }
 
-pub fn zretry(comptime operation: anytype, options: RetryOptions) !void {
+pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions) !void {
     try validateOptions(options);
 
     var delay_ms: i64 = options.inital_delay_ms;
@@ -41,7 +41,7 @@ pub fn zretry(comptime operation: anytype, options: RetryOptions) !void {
 
     var attempt: usize = 0;
     while (attempt < options.max_attempts) : (attempt += 1) {
-        operation() catch |err| {
+        @call(.auto, operation, args) catch |err| {
             if (attempt + 1 == options.max_attempts) return err;
 
             const sleep_ms: i64 = switch (options.jitter) {
@@ -84,6 +84,15 @@ test "max attempts can't be zero" {
     try testing.expectError(error.InvalidMaxAttempts, validateOptions(options));
 }
 
+test "doesn't retry when max_attempts = 1" {
+    Work.calls = 0;
+    var options = testOptions();
+    options.max_attempts = 1;
+
+    try zretry(Work.doWork, .{}, options);
+    try testing.expectEqual(@as(i32, 1), Work.calls);
+}
+
 test "inital can't exceed max" {
     var options = testOptions();
     options.inital_delay_ms = 2000;
@@ -120,28 +129,71 @@ const Work = struct {
             return error.FunctionFail;
         }
     }
+
+    fn downloadFile(url: []const u8, output_path: []const u8) !void {
+        _ = url;
+        _ = output_path;
+        calls += 1;
+    }
 };
 
 test "only calls once on working function" {
     Work.calls = 0;
 
-    try zretry(Work.doWork, zeroDelayTestOptions());
+    try zretry(Work.doWork, .{}, zeroDelayTestOptions());
     try testing.expectEqual(@as(i32, 1), Work.calls);
 }
 
 test "faultyWork fails twice succeeds on third" {
     Work.calls = 0;
 
-    try zretry(Work.faultyWork, zeroDelayTestOptions());
+    try zretry(Work.faultyWork, .{}, zeroDelayTestOptions());
     try testing.expectEqual(@as(i32, 3), Work.calls);
 }
 
-test "zretry validates options before calling operation" {
+test "can't put in negative ms values" {
     Work.calls = 0;
 
     var options = zeroDelayTestOptions();
     options.inital_delay_ms = -1;
 
-    try testing.expectError(error.InvalidDelay, zretry(Work.doWork, options));
+    try testing.expectError(
+        error.InvalidDelay,
+        zretry(Work.doWork, .{}, options),
+    );
     try testing.expectEqual(@as(i32, 0), Work.calls);
+}
+
+test "works with functions with parameters" {
+    Work.calls = 0;
+
+    try zretry(
+        Work.downloadFile,
+        .{ "https://example.com/file.html", "output.html" },
+        zeroDelayTestOptions(),
+    );
+    try testing.expectEqual(@as(i32, 1), Work.calls);
+}
+
+const AlwaysFail = struct {
+    var calls: i32 = 0;
+
+    fn doWork() WorkError!void {
+        calls += 1;
+        return WorkError.FunctionFail;
+    }
+};
+
+test "retries max_retry times" {
+    AlwaysFail.calls = 0;
+    const max_attempts = 5;
+
+    var options = zeroDelayTestOptions();
+    options.max_attempts = max_attempts;
+
+    try testing.expectError(
+        error.FunctionFail,
+        zretry(AlwaysFail.doWork, .{}, options),
+    );
+    try testing.expectEqual(@as(i32, max_attempts), AlwaysFail.calls);
 }
