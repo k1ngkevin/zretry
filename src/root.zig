@@ -27,24 +27,35 @@ fn validateOptions(options: RetryOptions) RetryError!void {
     if (options.inital_delay_ms > options.max_delay_ms) return RetryError.InvalidDelay;
 }
 
-pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions) !void {
+fn RetryPayload(comptime operation: anytype) type {
+    const ret = @typeInfo(@TypeOf(operation)).@"fn".return_type.?;
+
+    return switch (@typeInfo(ret)) {
+        .error_union => |eu| eu.payload,
+        else => @compileError("zretry operation must return an error union"),
+    };
+}
+
+pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions) !RetryPayload(operation) {
     try validateOptions(options);
 
     var delay_ms: i64 = options.inital_delay_ms;
+
+    var prng: std.Random.DefaultPrng = undefined;
 
     const maybe_random = switch (options.jitter) {
         .none => null,
         .full => options.random orelse blk: {
             var seed: u64 = undefined;
             options.io.random(std.mem.asBytes(&seed));
-            var prng = std.Random.DefaultPrng.init(seed);
+            prng = std.Random.DefaultPrng.init(seed);
             break :blk prng.random();
         },
     };
 
     var attempt: usize = 0;
     while (attempt < options.max_attempts) : (attempt += 1) {
-        @call(.auto, operation, args) catch |err| {
+        const result = @call(.auto, operation, args) catch |err| {
             if (attempt + 1 == options.max_attempts) return err;
 
             const sleep_ms: i64 = switch (options.jitter) {
@@ -61,8 +72,9 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
             };
             continue;
         };
-        return;
+        return result;
     }
+    unreachable;
 }
 
 fn testOptions() RetryOptions {
@@ -125,6 +137,13 @@ const Work = struct {
         calls += 1;
     }
 
+    fn returnWork() !i32 {
+        const value: i32 = 10 + 10;
+        try testing.expectEqual(@as(i32, 20), value);
+        calls += 1;
+        return value;
+    }
+
     fn faultyWork() WorkError!void {
         calls += 1;
 
@@ -176,6 +195,14 @@ test "works with functions with parameters" {
         zeroDelayTestOptions(),
     );
     try testing.expectEqual(@as(i32, 1), Work.calls);
+}
+
+test "works with functions that return a value" {
+    Work.calls = 0;
+
+    const return_value = try zretry(Work.returnWork, .{}, zeroDelayTestOptions());
+    try testing.expectEqual(@as(i32, 1), Work.calls);
+    try testing.expectEqual(@as(i32, 20), return_value);
 }
 
 const AlwaysFail = struct {
