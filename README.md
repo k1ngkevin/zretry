@@ -79,6 +79,45 @@ pub fn main(init: std.process.Init) !void {
 }
 ```
 
+To retry only some errors, pass a `retry_if` function.
+If `retry_if` is omitted, `zretry` retries every error until `max_attempts` is reached.
+
+```zig
+const std = @import("std");
+const retry = @import("zretry");
+
+const FetchError = error{
+    Timeout,
+    TooManyRequests,
+    ServiceUnavailable,
+    Forbidden,
+    InvalidUrl,
+};
+
+fn shouldRetryError(err: anyerror) bool {
+    return switch (err) {
+        error.Timeout,
+        error.TooManyRequests,
+        error.ServiceUnavailable,
+        => true,
+
+        else => false,
+    };
+}
+
+fn fetchResource() FetchError!void {
+    // map temporary failures to retryable errors
+}
+
+pub fn main(init: std.process.Init) !void {
+    try retry.zretry(fetchResource, .{}, .{
+        .io = init.io,
+        .max_attempts = 5,
+        .retry_if = shouldRetryError,
+    });
+}
+```
+
 ## Options
 
 - `io`: `std.Io` used to sleep between retries and seed jitter randomness.
@@ -93,6 +132,7 @@ pub fn main(init: std.process.Init) !void {
   - `.none`: sleep for the calculated delay exactly
   - `.percent`: subtract a small percentage from each delay
 - `random`: optional `std.Random`; if omitted, one is seeded from `std.Io`.
+- `retry_if`: optional function that receives the error and returns `true` to retry it or `false` to return it immediately. If omitted, all errors are retried.
 
 ## Development
 

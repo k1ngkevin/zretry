@@ -5,6 +5,8 @@ pub const Jitter = enum { none, percent };
 
 pub const Strategy = enum { fixed, linear, exponential };
 
+pub const RetryFilter = *const fn (anyerror) bool;
+
 pub const RetryOptions = struct {
     io: std.Io,
     max_attempts: usize = 5,
@@ -12,6 +14,7 @@ pub const RetryOptions = struct {
     max_delay_ms: i64 = 5000,
     jitter: Jitter = .percent,
     random: ?std.Random = null,
+    retry_if: ?RetryFilter = null,
     strategy: Strategy = .exponential,
 };
 
@@ -56,6 +59,10 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
     var attempt: usize = 0;
     while (attempt < options.max_attempts) : (attempt += 1) {
         const result = @call(.auto, operation, args) catch |err| {
+            if (options.retry_if) |retry_if| {
+                if (!retry_if(err)) return err;
+            }
+
             if (attempt + 1 == options.max_attempts) return err;
 
             const jitter_ms: i64 = switch (options.jitter) {
@@ -227,4 +234,55 @@ test "retries max_retry times" {
         zretry(AlwaysFail.doWork, .{}, options),
     );
     try testing.expectEqual(@as(i32, max_attempts), AlwaysFail.calls);
+}
+
+const FilteredError = error{ Retryable, Permanent };
+
+fn shouldRetryError(err: anyerror) bool {
+    return switch (err) {
+        error.Retryable => true,
+        else => false,
+    };
+}
+
+const FilteredWork = struct {
+    var calls: i32 = 0;
+
+    fn permanentFailure() FilteredError!void {
+        calls += 1;
+        return error.Permanent;
+    }
+
+    fn retryableThenSucceeds() FilteredError!void {
+        calls += 1;
+
+        if (calls < 3) {
+            return error.Retryable;
+        }
+    }
+};
+
+test "retry_if stops retries when it returns false" {
+    FilteredWork.calls = 0;
+
+    var options = zeroDelayTestOptions();
+    options.max_attempts = 5;
+    options.retry_if = shouldRetryError;
+
+    try testing.expectError(
+        error.Permanent,
+        zretry(FilteredWork.permanentFailure, .{}, options),
+    );
+    try testing.expectEqual(@as(i32, 1), FilteredWork.calls);
+}
+
+test "retry_if allows retries when it returns true" {
+    FilteredWork.calls = 0;
+
+    var options = zeroDelayTestOptions();
+    options.max_attempts = 5;
+    options.retry_if = shouldRetryError;
+
+    try zretry(FilteredWork.retryableThenSucceeds, .{}, options);
+    try testing.expectEqual(@as(i32, 3), FilteredWork.calls);
 }
