@@ -9,7 +9,7 @@ Create a project with `zig init` that has a `build.zig` and `build.zig.zon`.
 Run:
 
 ```sh
-zig fetch --save 'git+https://github.com/k1ngkevin/zretry#v0.3.1'
+zig fetch --save 'git+https://github.com/k1ngkevin/zretry#v0.4.0'
 ```
 
 Add this to your `build.zig`:
