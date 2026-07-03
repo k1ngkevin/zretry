@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 
-pub const Jitter = enum { none, full };
+pub const Jitter = enum { none, percent };
 
 pub const Strategy = enum { fixed, linear, exponential };
 
@@ -10,7 +10,7 @@ pub const RetryOptions = struct {
     max_attempts: usize = 5,
     initial_delay_ms: i64 = 1000,
     max_delay_ms: i64 = 5000,
-    jitter: Jitter = .full,
+    jitter: Jitter = .percent,
     random: ?std.Random = null,
     strategy: Strategy = .exponential,
 };
@@ -45,7 +45,7 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
 
     const maybe_random = switch (options.jitter) {
         .none => null,
-        .full => options.random orelse blk: {
+        .percent => options.random orelse blk: {
             var seed: u64 = undefined;
             options.io.random(std.mem.asBytes(&seed));
             prng = std.Random.DefaultPrng.init(seed);
@@ -58,11 +58,12 @@ pub fn zretry(comptime operation: anytype, args: anytype, options: RetryOptions)
         const result = @call(.auto, operation, args) catch |err| {
             if (attempt + 1 == options.max_attempts) return err;
 
-            const sleep_ms: i64 = switch (options.jitter) {
-                .none => delay_ms,
-                .full => maybe_random.?.intRangeAtMost(i64, 0, delay_ms),
+            const jitter_ms: i64 = switch (options.jitter) {
+                .none => 0,
+                .percent => maybe_random.?.intRangeAtMost(i64, 0, @divFloor(delay_ms, 20)),
             };
 
+            const sleep_ms = delay_ms - jitter_ms;
             try options.io.sleep(.fromMilliseconds(sleep_ms), .awake);
 
             delay_ms = switch (options.strategy) {

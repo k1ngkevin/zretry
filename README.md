@@ -86,7 +86,12 @@ pub fn main(init: std.process.Init) !void {
 - `initial_delay_ms`: starting delay in milliseconds.
 - `max_delay_ms`: maximum delay in milliseconds.
 - `strategy`: `.fixed`, `.linear`, or `.exponential`.
-- `jitter`: `.none` or `.full`.
+  - `.fixed`: use the same delay after every failure
+  - `.linear`: increase by `initial_delay_ms` every failure
+  - `.exponential`: double delay after each failure
+- `jitter`: `.none` or `.percent`.
+  - `.none`: sleep for the calculated delay exactly
+  - `.percent`: subtract a small percentage from each delay
 - `random`: optional `std.Random`; if omitted, one is seeded from `std.Io`.
 
 ## Development
